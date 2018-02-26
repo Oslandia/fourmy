@@ -75,7 +75,7 @@ namespace python
         result["typestr"] = wkb::system_byteoder() == wkb::little_endian ? "<f8" : ">f8";
         result["shape"] = boost::python::make_tuple(l.size(), 2);
         sizeof(geometry::point<double>) == 16 || die("big bug here");
-        result["data"] = &l[0][0];
+        result["data"] = &(l[0][0]);
         return result;
     }
 

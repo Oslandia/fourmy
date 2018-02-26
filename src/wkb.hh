@@ -5,10 +5,11 @@
 
 #include<iostream>
 
-using namespace utility;
 
 namespace wkb
 {
+    using namespace utility;
+
     enum byteorder_t {
         big_endian = 0,
         little_endian =1

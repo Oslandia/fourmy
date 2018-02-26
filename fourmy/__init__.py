@@ -1,14 +1,27 @@
 # coding = utf-8
 
 import os
-import ctypes
+from ctypes import cdll, CFUNCTYPE, c_int, c_char_p, POINTER
 
 dll_file = None
 for f in os.listdir(os.path.dirname(__file__)):
     if f[:7] == '_fourmy' and (f.endswith(".so") or f.endswith(".pyd")):
         dll_file = os.path.join(os.path.dirname(__file__), f)
 
-_fourmy = ctypes.cdll.LoadLibrary(dll_file)
+_fourmy = cdll.LoadLibrary(dll_file)
+
+_error_func_t = CFUNCTYPE(c_int, c_char_p)
+
+def py_error_func(msg):
+    raise RuntimeError(msg.decode("utf-8"))
+
+def py_warning_func(msg):
+    warn(msg.decode("utf-8"))
+
+
+error_func = _error_func_t(py_error_func)
+warning_func = _error_func_t(py_warning_func)
+_fourmy.fourmy_set_error_handlers(warning_func, error_func)
 
 class Geometry(object):
     def __init__(self, wkb=None, handle=None):

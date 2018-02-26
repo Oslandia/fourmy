@@ -1,9 +1,11 @@
 from fourmy import Geometry, tessellate
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
 
 print(Geometry(Polygon([(0,0), (1,0), (1,1), (0,1)])).type)
 t = tessellate(Geometry(Polygon([(0,0), (1,0), (1,1), (0,1)])))
 print(t.type)
+
+Geometry(Point(1,2,3))
 
 
 ## from fourmy import LineString as Ls, loads, tessellate

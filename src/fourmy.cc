@@ -18,8 +18,18 @@
 
 typedef unsigned char byte;
 
-fourmy_alloc_handler_t __fourmy_alloc_handler = malloc;
-fourmy_free_handler_t __fourmy_free_handler = free;
+void prt(const char * msg)
+{
+    printf("%s\n", msg);
+}
+
+static fourmy_alloc_handler_t __fourmy_alloc_handler = malloc;
+static fourmy_free_handler_t __fourmy_free_handler = free;
+static fourmy_error_handler_t __fourmy_warning_handler = prt;
+static fourmy_error_handler_t __fourmy_error_handler = prt;
+
+#define FOURMY_WARNING __fourmy_warning_handler
+#define FOURMY_ERROR __fourmy_error_handler
 
 //const long fourmy_type_point =           FOURMY_TYPE_POINT;
 //const long fourmy_type_linestring =      FOURMY_TYPE_LINESTRING;
@@ -38,9 +48,23 @@ extern "C" {
         __fourmy_free_handler = free_handler;
     }
 
+    void fourmy_set_error_handlers( fourmy_error_handler_t warning_handler, fourmy_error_handler_t error_handler )
+    {
+        __fourmy_warning_handler = warning_handler;
+        __fourmy_error_handler = error_handler;
+    }
+
     fourmy_geometry_t * fourmy_from_wkb(const unsigned char* wkb)
     {
-        return new geometry::geometry<double>(wkb::loads<double>(wkb));
+        try
+        {
+            return new geometry::geometry<double>(wkb::loads<double>(wkb));
+        }
+        catch (std::exception & e)
+        {
+            FOURMY_ERROR(e.what());
+            return NULL;
+        }
     }
 
     void fourmy_delete(fourmy_geometry_t * geom)

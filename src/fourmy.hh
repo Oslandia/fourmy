@@ -16,6 +16,8 @@ extern "C"
 #endif
     typedef void* ( *fourmy_alloc_handler_t ) ( size_t );
     typedef void ( *fourmy_free_handler_t ) ( void* );
+    
+    typedef void ( *fourmy_error_handler_t ) ( const char* );
 
     typedef void fourmy_geometry_t;
 
@@ -63,6 +65,8 @@ extern "C"
     FOURMY_API_EXPORT fourmy_geometry_t * fourmy_tesselate(fourmy_geometry_t * geom);
 
     FOURMY_API_EXPORT void fourmy_set_alloc_handlers( fourmy_alloc_handler_t alloc_handler, fourmy_free_handler_t free_handler);
+
+    FOURMY_API_EXPORT void fourmy_set_error_handlers( fourmy_error_handler_t warning_handler, fourmy_error_handler_t error_handler );
 
 #ifdef __cplusplus
 }

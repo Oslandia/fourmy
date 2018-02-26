@@ -1,71 +1,163 @@
 // c++ -shared cgal.cpp -lCGAL -lgmp -I/usr/include/python3.5m/ -lboost_python-py35 -fPIC -o cgal.so
 //
+#include "fourmy.hh"
+
 #include "geometry.hh"
 #include "wkb.hh"
 #include "delaunay.hh"
-#include "python.hh"
+
+#include "Python.h"
 
 #include <iostream>
 
-#include <boost/python.hpp>
-#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+//#include <boost/python.hpp>
+//#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 
 //#include "union.hh"
 //#include "delaunay.hh"
 
 typedef unsigned char byte;
 
-void translate_out_of_range(const std::out_of_range & e)
-{
-    PyErr_SetString(PyExc_IndexError, e.what());
+fourmy_alloc_handler_t __fourmy_alloc_handler = malloc;
+fourmy_free_handler_t __fourmy_free_handler = free;
+
+//const long fourmy_type_point =           FOURMY_TYPE_POINT;
+//const long fourmy_type_linestring =      FOURMY_TYPE_LINESTRING;
+//const long fourmy_type_polygon =         FOURMY_TYPE_POLYGON;
+//const long fourmy_type_multipoint =      FOURMY_TYPE_MULTIPOINT;
+//const long fourmy_type_multilinestring = FOURMY_TYPE_MULTILINESTRING;
+//const long fourmy_type_multipolygon =    FOURMY_TYPE_MULTIPOLYGON;
+//const long fourmy_type_invalid =         FOURMY_TYPE_INVALID;         
+
+extern "C" {
+
+
+    void fourmy_set_alloc_handlers( fourmy_alloc_handler_t alloc_handler, fourmy_free_handler_t free_handler )
+    {
+        __fourmy_alloc_handler = alloc_handler;
+        __fourmy_free_handler = free_handler;
+    }
+
+    fourmy_geometry_t * fourmy_from_wkb(const unsigned char* wkb)
+    {
+        return new geometry::geometry<double>(wkb::loads<double>(wkb));
+    }
+
+    void fourmy_delete(fourmy_geometry_t * geom)
+    {
+        delete reinterpret_cast<geometry::geometry<double> *>(geom);
+    }
+
+    fourmy_geometry_type_t fourmy_type(fourmy_geometry_t * geom)
+    {
+        const geometry::geometry<double> * g = reinterpret_cast<geometry::geometry<double> *>(geom);
+        switch (g->which())
+        {
+            case 0: return FOURMY_TYPE_EMPTY;
+            case 1: return FOURMY_TYPE_POINT;
+            case 2: return FOURMY_TYPE_LINESTRING;
+            case 3: return FOURMY_TYPE_POLYGON;
+            case 4: return FOURMY_TYPE_MULTIPOINT;
+            case 5: return FOURMY_TYPE_MULTILINESTRING;
+            case 6: return FOURMY_TYPE_MULTIPOLYGON;
+        }
+        // @todo handle error
+        return FOURMY_TYPE_INVALID;
+    }
+
+
+    fourmy_geometry_t * fourmy_tesselate(fourmy_geometry_t * geom)
+    {
+        return new geometry::geometry<double>(delaunay::tessellate<double>( boost::get< const geometry::polygon<double> &>(*reinterpret_cast<const geometry::geometry<double> *>(geom))));
+    }
+
+
+    void translate_out_of_range(const std::out_of_range & e)
+    {
+        PyErr_SetString(PyExc_IndexError, e.what());
+    }
+
 }
 
-BOOST_PYTHON_MODULE(fourmy)
-{
-    using namespace boost::python;
 
-    register_exception_translator<std::out_of_range>(translate_out_of_range);
-    
-    enum_<wkb::byteorder_t>("wkb_byteorder")
-        .value("big_endian", wkb::big_endian)
-        .value("little_endian", wkb::little_endian)
-        ;
 
-    enum_<wkb::type_t>("wkb_type")
-        .value("Point", wkb::point)
-        .value("LineString", wkb::linestring)
-        .value("Polygon", wkb::polygon)
-        .value("MultiPoint", wkb::multipoint)
-        .value("MultiLineString", wkb::multilinestring)
-        .value("MultiPolygon", wkb::multipolygon)
-        .value("GeometryCollection", wkb::geometrycollection)
-        ;
+//extern "C" PyMethodDef fourmy_module_methods[] = { 
+//    {   
+//        "from_wkb",
+//        python_fourmy_from_wkb,
+//        METH_VARARGS,
+//        "Print 'hello world' from a method defined in a C extension."
+//    },  
+//    {NULL, NULL, 0, NULL}
+//};
+//
+//extern "C" struct PyModuleDef fourmy_module_definition = { 
+//    PyModuleDef_HEAD_INIT,
+//    "_fourmy",
+//    "expose fourmy c API to python",
+//    -1, 
+//    fourmy_module_methods
+//};
+//
+//extern "C" PyMODINIT_FUNC PyInit__fourmy(void)
+//{
+//    Py_Initialize();
+//
+//    return PyModule_Create(&fourmy_module_definition);
+//}
 
-    class_<geometry::point<double>>("Point", init<>())
-        .def("__len__", &python::point_len) 
-        .def("__getitem__", &python::point_getitem) 
-        .def("__repr__", &python::point_repr) 
-        .add_property("__array_interface__", &python::point_array_interface) 
-        ;
-    class_<geometry::linestring<double>>("LineString", init<>())
-        .def(vector_indexing_suite<geometry::linestring<double>>() )
-        .add_property("__array_interface__", &python::linestring_array_interface) 
-        ;
-
-    class_<geometry::polygon<double>>("Polygon", init<>())
-        .def(vector_indexing_suite<geometry::polygon<double>>() )
-        ;
-
-    class_<geometry::multipolygon<double>>("MultiPolygon", init<>())
-        .def(vector_indexing_suite<geometry::multipolygon<double>>() )
-        ;
-
-    class_<geometry::geometry<double>>("Geometry", init<>())
-        ;
-
-    def("loads", &python::loads);
-    def("tessellate", &python::tessellate);
-}
+//BOOST_PYTHON_MODULE(fourmy)
+//{
+//    using namespace boost::python;
+//
+//    register_exception_translator<std::out_of_range>(translate_out_of_range);
+//
+//    def("from_wkb", &fourmy_from_wkb, return_internal_reference<>());
+//    //def("delete", &fourmy_delete);
+//    //def("tesselate", &fourmy_tesselate, return_internal_reference<>());
+//    
+//    enum_<wkb::byteorder_t>("wkb_byteorder")
+//        .value("big_endian", wkb::big_endian)
+//        .value("little_endian", wkb::little_endian)
+//        ;
+//
+//    enum_<wkb::type_t>("wkb_type")
+//        .value("Point", wkb::point)
+//        .value("LineString", wkb::linestring)
+//        .value("Polygon", wkb::polygon)
+//        .value("MultiPoint", wkb::multipoint)
+//        .value("MultiLineString", wkb::multilinestring)
+//        .value("MultiPolygon", wkb::multipolygon)
+//        .value("GeometryCollection", wkb::geometrycollection)
+//        ;
+//
+//    class_<geometry::point<double>>("Point", init<>())
+//        .def("__len__", &python::point_len) 
+//        .def("__getitem__", &python::point_getitem) 
+//        .def("__repr__", &python::point_repr) 
+//        .add_property("__array_interface__", &python::point_array_interface) 
+//        ;
+//    class_<geometry::linestring<double>>("LineString", init<>())
+//        //.def(vector_indexing_suite<geometry::linestring<double>>() )
+//        .def("__len__", &geometry::linestring<double>::size) 
+//        .def("__getitem__", &python::linestring_getitem) 
+//        .add_property("__array_interface__", &python::linestring_array_interface) 
+//        ;
+//
+//    class_<geometry::polygon<double>>("Polygon", init<>())
+//        .def(vector_indexing_suite<geometry::polygon<double>>() )
+//        ;
+//
+//    class_<geometry::multipolygon<double>>("MultiPolygon", init<>())
+//        .def(vector_indexing_suite<geometry::multipolygon<double>>() )
+//        ;
+//
+//    class_<geometry::geometry<double>>("Geometry", init<>())
+//        ;
+//
+//    def("loads", &python::loads);
+//    def("tessellate", &python::tessellate);
+//}
 
 //void translate_runtime_error(const std::runtime_error & e)
 //{
@@ -103,7 +195,7 @@ BOOST_PYTHON_MODULE(fourmy)
     //    ;
         //.def("__len__", &geometry::point<double>::size)
         //.def("__getitem__", const double &(geometry::point<double>::*operator{])() =  &geometry::point<double>::operator[])
-        ;
+    //    ;
 
 
 //    class_<geometry::coordinate>("Coordinate", no_init)

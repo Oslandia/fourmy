@@ -14,11 +14,11 @@ namespace geometry
     struct empty {};
     template<typename T> using xy = std::array<T, 2>;
     template<typename T> using point = xy<T>;
-    template<typename T> using linestring = std::vector< xy<T> >;
-    template<typename T> using polygon = std::vector< linestring<T> >;
-    template<typename T> using multipoint = std::vector< xy<T> >;
-    template<typename T> using multilinestring = std::vector< linestring<T> >;
-    template<typename T> using multipolygon = std::vector< polygon<T> >;
+    template<typename T> struct linestring : std::vector< xy<T> >{using std::vector< xy<T> >::vector;};
+    template<typename T> struct polygon : std::vector< linestring<T> >{using std::vector< linestring<T> >::vector;};
+    template<typename T> struct multipoint : std::vector< xy<T> >{using  std::vector< xy<T> >::vector;};
+    template<typename T> struct multilinestring : std::vector< linestring<T> >{using std::vector< linestring<T> >::vector;};
+    template<typename T> struct multipolygon : std::vector< polygon<T> >{using std::vector< polygon<T> >::vector;};
     template<typename T> using geometry = boost::variant<
         empty,
         point<T>,

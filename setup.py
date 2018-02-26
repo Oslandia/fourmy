@@ -8,7 +8,7 @@ for key, value in cfg_vars.items():
     if type(value) == str:
         cfg_vars[key] = value.replace("-Wstrict-prototypes", "").replace("-DNDEBUG", "-DDEBUG")
 
-mymodule = Extension('fourmy',
+mymodule = Extension('fourmy._fourmy',
                     define_macros = [('MAJOR_VERSION', '1'),
                                      ('MINOR_VERSION', '0')],
                     include_dirs = ['/usr/local/include'],
@@ -19,4 +19,5 @@ mymodule = Extension('fourmy',
 setup (name = 'fourmy',
        version = '0.1',
        description = 'Some functions from CGAL for GIS, it does not aim to become full CGAL bindings. The interface is modeled after shapely.',
-       ext_modules = [mymodule])
+       ext_modules = [mymodule],
+       packages=['fourmy'])

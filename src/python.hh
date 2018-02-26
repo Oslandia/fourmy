@@ -58,6 +58,11 @@ namespace python
         return ("("+std::to_string(p[0])+", "+std::to_string(p[1])+")").c_str();
     }
 
+    geometry::point<double> linestring_getitem(const geometry::linestring<double> & l, int i)
+    {
+        return l[i];
+    }
+
     boost::python::object point_array_interface(const geometry::point<double> & p)
     {
         boost::python::dict result;

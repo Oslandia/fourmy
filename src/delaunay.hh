@@ -54,6 +54,7 @@ namespace delaunay
             }
         }
     }
+
     //explore set of facets connected with non constrained edges,
     //and attribute to each such set a nesting level.
     //We start from facets incident to the infinite vertex, with a nesting

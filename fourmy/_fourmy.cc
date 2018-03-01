@@ -1,158 +1,142 @@
-// c++ -shared cgal.cpp -lCGAL -lgmp -I/usr/include/python3.5m/ -lboost_python-py35 -fPIC -o cgal.so
-//
-#include "fourmy.hh"
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Constrained_Delaunay_triangulation_2.h>
+#include <CGAL/Triangulation_face_base_with_info_2.h>
+#include <CGAL/Polygon_2.h>
 
-#include "geometry.hh"
-#include "wkb.hh"
-#include "delaunay.hh"
-
-#include "Python.h"
-
+#include <boost/python.hpp>
 #include <iostream>
+#include <string>
 
-//#include <boost/python.hpp>
-//#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+namespace fourmy {
 
-//#include "union.hh"
-//#include "delaunay.hh"
-
-typedef unsigned char byte;
-
-void prt(const char * msg)
+struct FaceInfo2
 {
-    printf("%s\n", msg);
+    FaceInfo2(){}
+    int nesting_level;
+    bool in_domain(){ 
+        return nesting_level%2 == 1;
+    }
+};
+
+
+typedef CGAL::Exact_predicates_inexact_constructions_kernel       K;
+typedef CGAL::Triangulation_vertex_base_2<K>                      Vb;
+typedef CGAL::Triangulation_face_base_with_info_2<FaceInfo2,K>    Fbb;
+typedef CGAL::Constrained_triangulation_face_base_2<K,Fbb>        Fb;
+typedef CGAL::Triangulation_data_structure_2<Vb,Fb>               TDS;
+typedef CGAL::Exact_predicates_tag                                Itag;
+typedef CGAL::Constrained_Delaunay_triangulation_2<K, TDS, Itag>  CDT;
+typedef CDT::Point                                                Point;
+typedef CGAL::Polygon_2<K>                                        Polygon_2;
+void 
+mark_domains(CDT& ct, 
+             CDT::Face_handle start, 
+             int index, 
+             std::list<CDT::Edge>& border )
+{
+    if(start->info().nesting_level != -1){
+        return;
+    }
+    std::list<CDT::Face_handle> queue;
+    queue.push_back(start);
+    while(! queue.empty()){
+        CDT::Face_handle fh = queue.front();
+        queue.pop_front();
+        if(fh->info().nesting_level == -1){
+            fh->info().nesting_level = index;
+            for(int i = 0; i < 3; i++){
+                CDT::Edge e(fh,i);
+                CDT::Face_handle n = fh->neighbor(i);
+                if(n->info().nesting_level == -1){
+                    if(ct.is_constrained(e)) border.push_back(e);
+                    else queue.push_back(n);
+                }
+            }
+        }
+    }
 }
 
-static fourmy_alloc_handler_t __fourmy_alloc_handler = malloc;
-static fourmy_free_handler_t __fourmy_free_handler = free;
-static fourmy_error_handler_t __fourmy_warning_handler = prt;
-static fourmy_error_handler_t __fourmy_error_handler = prt;
-
-#define FOURMY_WARNING __fourmy_warning_handler
-#define FOURMY_ERROR __fourmy_error_handler
-
-//const long fourmy_type_point =           FOURMY_TYPE_POINT;
-//const long fourmy_type_linestring =      FOURMY_TYPE_LINESTRING;
-//const long fourmy_type_polygon =         FOURMY_TYPE_POLYGON;
-//const long fourmy_type_multipoint =      FOURMY_TYPE_MULTIPOINT;
-//const long fourmy_type_multilinestring = FOURMY_TYPE_MULTILINESTRING;
-//const long fourmy_type_multipolygon =    FOURMY_TYPE_MULTIPOLYGON;
-//const long fourmy_type_invalid =         FOURMY_TYPE_INVALID;         
-
-extern "C" {
-
-
-    void fourmy_set_alloc_handlers( fourmy_alloc_handler_t alloc_handler, fourmy_free_handler_t free_handler )
-    {
-        __fourmy_alloc_handler = alloc_handler;
-        __fourmy_free_handler = free_handler;
+//explore set of facets connected with non constrained edges,
+//and attribute to each such set a nesting level.
+//We start from facets incident to the infinite vertex, with a nesting
+//level of 0. Then we recursively consider the non-explored facets incident 
+//to constrained edges bounding the former set and increase the nesting level by 1.
+//Facets in the domain are those with an odd nesting level.
+void
+mark_domains(CDT& cdt)
+{
+    for(CDT::All_faces_iterator it = cdt.all_faces_begin(); it != cdt.all_faces_end(); ++it){
+        it->info().nesting_level = -1;
     }
-
-    void fourmy_set_error_handlers( fourmy_error_handler_t warning_handler, fourmy_error_handler_t error_handler )
-    {
-        __fourmy_warning_handler = warning_handler;
-        __fourmy_error_handler = error_handler;
-    }
-
-    fourmy_geometry_t * fourmy_from_wkb(const unsigned char* wkb, int * srid=NULL)
-    {
-        try
-        {
-            return new geometry::geometry<double>(wkb::load<double>(wkb, srid));
-        }
-        catch (std::exception & e)
-        {
-            FOURMY_ERROR(e.what());
-            return NULL;
+    std::list<CDT::Edge> border;
+    mark_domains(cdt, cdt.infinite_face(), 0, border);
+    while(! border.empty()){
+        CDT::Edge e = border.front();
+        border.pop_front();
+        CDT::Face_handle n = e.first->neighbor(e.second);
+        if(n->info().nesting_level == -1){
+            mark_domains(cdt, n, e.first->info().nesting_level+1, border);
         }
     }
+}
 
-    void fourmy_free(char * mem)
+Polygon_2 polygon_from_ring(const boost::python::object & coords)
+{
+    using namespace boost::python;
+    Polygon_2 poly;
+    size_t sz = extract<size_t>(coords.attr("__len__")());
+    for (size_t i=0; i<sz-1; i++)
+        poly.push_back(Point(extract<double>(coords[i][0]), extract<double>(coords[i][1])));
+    return std::move(poly);
+}
+
+boost::python::object tessellate(const boost::python::object & polygon)
+{
+    using namespace boost::python;
+
+    const char * type = extract<const char *>(polygon.attr("type"));
+    if (type != std::string("Polygon"))
+        throw std::runtime_error("tessellate only accepts shapely Polygons");
+
+    CDT cdt;
+
     {
-        __fourmy_free_handler(mem);
+        Polygon_2 poly(polygon_from_ring(polygon.attr("exterior").attr("coords")));
+        cdt.insert_constraint(poly.vertices_begin(), poly.vertices_end(), true);
+    }
+    const size_t nrings = extract<size_t>(polygon.attr("interiors").attr("__len__")());
+    for (size_t r=0; r<nrings; r++)
+    {
+        Polygon_2 poly(polygon_from_ring(polygon.attr("interiors")[r].attr("coords")));
+        cdt.insert_constraint(poly.vertices_begin(), poly.vertices_end(), true);
     }
 
-    void fourmy_as_wkb(fourmy_geometry_t * geom, char** buffer, size_t* len, int srid)
+    mark_domains(cdt);
+
+    object shapely_geom = import("shapely.geometry");
+    list triangles;
+    for (CDT::Finite_faces_iterator fit=cdt.finite_faces_begin();
+                                    fit!=cdt.finite_faces_end();++fit)
     {
-        try
+        if (fit->info().in_domain())
         {
-            std::vector<unsigned char> bytes(wkb::dump<double>(*reinterpret_cast<geometry::geometry<double> *>(geom), srid));
-            *len = bytes.size();
-            *buffer = (char *)__fourmy_alloc_handler(bytes.size());
-            memcpy(buffer, &bytes[0], bytes.size());
-        }
-        catch (std::exception & e)
-        {
-            FOURMY_ERROR(e.what());
+            list ring;
+            for (size_t i=0; i<4; i++)
+                ring.attr("append")(make_tuple(fit->vertex(i%3)->point().x(), fit->vertex(i%3)->point().y()));
+            triangles.attr("append")(shapely_geom.attr("Polygon")(ring));
         }
     }
-
-    void fourmy_delete(fourmy_geometry_t * geom)
-    {
-        delete reinterpret_cast<geometry::geometry<double> *>(geom);
-    }
-
-    fourmy_geometry_type_t fourmy_type(fourmy_geometry_t * geom)
-    {
-        const geometry::geometry<double> * g = reinterpret_cast<geometry::geometry<double> *>(geom);
-        switch (g->which())
-        {
-            case 1: return FOURMY_TYPE_POINT;
-            case 2: return FOURMY_TYPE_LINESTRING;
-            case 3: return FOURMY_TYPE_POLYGON;
-            case 4: return FOURMY_TYPE_MULTIPOINT;
-            case 5: return FOURMY_TYPE_MULTILINESTRING;
-            case 6: return FOURMY_TYPE_MULTIPOLYGON;
-        }
-        // @todo handle error
-        return FOURMY_TYPE_INVALID;
-    }
-
-
-    fourmy_geometry_t * fourmy_tesselate(fourmy_geometry_t * geom)
-    {
-        return new geometry::geometry<double>(delaunay::tessellate<double>( boost::get< const geometry::polygon<double> &>(*reinterpret_cast<const geometry::geometry<double> *>(geom))));
-    }
-
-
-    void translate_out_of_range(const std::out_of_range & e)
-    {
-        PyErr_SetString(PyExc_IndexError, e.what());
-    }
-
+    return shapely_geom.attr("MultiPolygon")(triangles);
+}
 }
 
 
+BOOST_PYTHON_MODULE(_fourmy)
+{
+    using namespace boost::python;
+    def("tessellate", &fourmy::tessellate);
+}
 
-//extern "C" PyMethodDef fourmy_module_methods[] = { 
-//    {   
-//        "from_wkb",
-//        python_fourmy_from_wkb,
-//        METH_VARARGS,
-//        "Print 'hello world' from a method defined in a C extension."
-//    },  
-//    {NULL, NULL, 0, NULL}
-//};
-//
-//extern "C" struct PyModuleDef fourmy_module_definition = { 
-//    PyModuleDef_HEAD_INIT,
-//    "_fourmy",
-//    "expose fourmy c API to python",
-//    -1, 
-//    fourmy_module_methods
-//};
-//
-//extern "C" PyMODINIT_FUNC PyInit__fourmy(void)
-//{
-//    Py_Initialize();
-//
-//    return PyModule_Create(&fourmy_module_definition);
-//}
-
-//BOOST_PYTHON_MODULE(fourmy)
-//{
-//    using namespace boost::python;
-//
 //    register_exception_translator<std::out_of_range>(translate_out_of_range);
 //
 //    def("from_wkb", &fourmy_from_wkb, return_internal_reference<>());

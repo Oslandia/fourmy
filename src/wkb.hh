@@ -35,66 +35,6 @@ namespace wkb
         geometrycollection = 7
     };
 
-
-    template< class W >
-    struct buffer
-    {
-        buffer(W && wkb)
-            :_wkb(std::move(wkb))
-        {
-            byteorder() == system_byteoder() || die("byteorder is different than system byteorder");
-        }
-
-        type_t type() const
-        {
-            return type(get_int(bytes() + 1) & 0xff);
-        }
-
-        bool has_z() const
-        {
-            return (get_int(bytes() + 1) & 0x80000000) != 0;
-        }
-
-        bool has_m() const
-        {
-            return (get_int(bytes() + 1) & 0x40000000) != 0;
-        }
-
-        bool has_srid() const
-        {
-            return (get_int(bytes() + 1) & 0x20000000) != 0;
-        }
-
-        int srid() const
-        {
-            return has_srid() ? get_int(bytes() + 1 + 4) : 0;
-        }
-
-        const unsigned char * geom_bytes() const
-        {
-            return bytes() + 1 + 4 + (has_srid() ? 4 : 0);
-        }
-
-    protected:
-        W _wkb;
-
-        const unsigned char * bytes() const 
-        {
-            return _wkb.bytes();
-        }
-
-
-        int get_int(const unsigned char *buf) const
-        {
-            return *reinterpret_cast<const int*>(buf);
-        }
-
-        byteorder_t byteorder() const
-        {
-            return byteorder_t(*bytes());
-        }
-    };
-
     unsigned char pop_byte(const unsigned char * & buffer)
     {
         const unsigned char res = *buffer;
@@ -152,7 +92,18 @@ namespace wkb
     }
 
     template<typename T>
-    typename geometry::geometry<T> loads(const unsigned char * buffer)
+    std::vector<unsigned char> dump(const geometry::geometry<T> & geom, int srid=0)
+    {
+        std::vector<unsigned char> result;
+        result.push_back('t');
+        result.push_back('o');
+        result.push_back('t');
+        result.push_back('o');
+        return std::move(result);
+    }
+
+    template<typename T>
+    typename geometry::geometry<T> load(const unsigned char * buffer, int * srid)
     {
         const byteorder_t byteorder = byteorder_t(pop_byte(buffer)); 
         byteorder == system_byteoder() || die("wkb byteorder isn't the same as system byteorder");
@@ -161,9 +112,13 @@ namespace wkb
         const bool has_z = (flags & 0x80000000) != 0;
         const bool has_m = (flags & 0x40000000) != 0;
         const bool has_srid = (flags & 0x20000000) != 0;
-        const int srid = has_srid ? pop_int(buffer) : 0;
 
-        (void) srid;
+        if (srid)
+            *srid = has_srid ? pop_int(buffer) : 0;
+        else if (has_srid)
+            pop_int(buffer);
+
+        std::cout << type << has_z << has_m << has_srid << " flags\n";
 
         switch (type)
         {

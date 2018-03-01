@@ -14,7 +14,7 @@ mymodule = Extension('fourmy._fourmy',
                     include_dirs = ['/usr/local/include'],
                     libraries = ['CGAL', 'gmp', 'mpfr', 'boost_python-py{}{}'.format(*sys.version_info[:2])],
 
-                    sources = ['src/fourmy.cc'])
+                    sources = ['fourmy/_fourmy.cc'])
 
 setup (name = 'fourmy',
        version = '0.1',

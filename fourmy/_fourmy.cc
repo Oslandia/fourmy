@@ -4,6 +4,7 @@
 #include <CGAL/Polygon_2.h>
 
 #include <boost/python.hpp>
+#include <boost/python/overloads.hpp>
 #include <iostream>
 #include <string>
 
@@ -84,13 +85,13 @@ Polygon_2 polygon_from_ring(const boost::python::object & coords)
 {
     using namespace boost::python;
     Polygon_2 poly;
-    size_t sz = extract<size_t>(coords.attr("__len__")());
+    const size_t sz = extract<size_t>(coords.attr("__len__")());
     for (size_t i=0; i<sz-1; i++)
         poly.push_back(Point(extract<double>(coords[i][0]), extract<double>(coords[i][1])));
     return std::move(poly);
 }
 
-boost::python::object tessellate(const boost::python::object & polygon)
+boost::python::object tessellate(const boost::python::object & polygon, const boost::python::object & lines = boost::python::object(), const boost::python::object & points = boost::python::object())
 {
     using namespace boost::python;
 
@@ -99,6 +100,14 @@ boost::python::object tessellate(const boost::python::object & polygon)
         throw std::runtime_error("tessellate only accepts shapely Polygons");
 
     CDT cdt;
+
+    // insert points
+    if (points !=  boost::python::object())
+    {
+        const size_t sz = extract<size_t>(points.attr("__len__")());
+        for (size_t i=0; i<sz; i++)
+            cdt.push_back(Point(extract<double>(points[i].attr("coords")[0][0]), extract<double>(points[i].attr("coords")[0][1])));
+    }
 
     {
         Polygon_2 poly(polygon_from_ring(polygon.attr("exterior").attr("coords")));
@@ -109,6 +118,22 @@ boost::python::object tessellate(const boost::python::object & polygon)
     {
         Polygon_2 poly(polygon_from_ring(polygon.attr("interiors")[r].attr("coords")));
         cdt.insert_constraint(poly.vertices_begin(), poly.vertices_end(), true);
+    }
+
+    // insert line constrains
+    if (lines !=  boost::python::object())
+    {
+        const size_t nlines = extract<size_t>(lines.attr("__len__")());
+        for (size_t l=0; l<nlines; l++)
+        {
+            const boost::python::object & coords = lines[l].attr("coords");
+            const size_t sz = extract<size_t>(coords.attr("__len__")());
+            for (size_t i=1; i<sz; i++)
+            {
+                cdt.insert_constraint(Point(extract<double>(coords[i-1][0]), extract<double>(coords[i-1][1])),
+                                      Point(extract<double>(coords[i][0]), extract<double>(coords[i][1])));
+            }
+        }
     }
 
     mark_domains(cdt);
@@ -130,11 +155,12 @@ boost::python::object tessellate(const boost::python::object & polygon)
 }
 }
 
+BOOST_PYTHON_FUNCTION_OVERLOADS(tessellate_overloads, fourmy::tessellate, 1, 3)
 
 BOOST_PYTHON_MODULE(_fourmy)
 {
     using namespace boost::python;
-    def("tessellate", &fourmy::tessellate);
+    def("tessellate", &fourmy::tessellate, tessellate_overloads(args("polygon", "lines", "points"), "This is tesselate's docstring"));
 }
 
 //    register_exception_translator<std::out_of_range>(translate_out_of_range);

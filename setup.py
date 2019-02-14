@@ -25,7 +25,7 @@ mymodule = Extension('fourmy._fourmy',
                     sources = ['fourmy/_fourmy.cc'])
 
 setup (name = 'fourmy',
-       version = '0.0.1',
+       version = '0.0.3',
        description = 'Some functions from CGAL for GIS, it does not aim to become full CGAL bindings. The interface is modeled after shapely.',
        ext_modules = [mymodule],
        packages=['fourmy'])
